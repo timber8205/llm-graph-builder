@@ -1,8 +1,7 @@
 import { TextInput } from '@neo4j-ndl/react';
 import React, { useState } from 'react';
-import { CustomFile, CustomFileBase, S3File, S3ModalProps, UserCredentials } from '../../../types';
+import { CustomFile, CustomFileBase, S3File, S3ModalProps } from '../../../types';
 import { urlScanAPI } from '../../../services/URLScan';
-import { useCredentials } from '../../../context/UserCredentials';
 import { validation } from '../../../utils/Utils';
 import { useFileContext } from '../../../context/UsersFiles';
 import { v4 as uuidv4 } from 'uuid';
@@ -15,9 +14,8 @@ const S3Modal: React.FC<S3ModalProps> = ({ hideModal, open }) => {
   const [secretKey, setSecretKey] = useState<string>('');
   const [status, setStatus] = useState<'unknown' | 'success' | 'info' | 'warning' | 'danger'>('unknown');
   const [statusMessage, setStatusMessage] = useState<string>('');
-  const [isFocused, setisFocused] = useState<boolean>(false);
+  const [isFocused, setIsFocused] = useState<boolean>(false);
   const [isValid, setValid] = useState<boolean>(false);
-  const { userCredentials } = useCredentials();
   const { setFilesData, model, filesData } = useFileContext();
 
   const reset = () => {
@@ -25,21 +23,27 @@ const S3Modal: React.FC<S3ModalProps> = ({ hideModal, open }) => {
     setAccessKey('');
     setSecretKey('');
     setValid(false);
-    setisFocused(false);
+    setIsFocused(false);
   };
 
   const submitHandler = async (url: string) => {
     const defaultValues: CustomFileBase = {
-      processing: 0,
+      processingTotalTime: 0,
       status: 'New',
-      NodesCount: 0,
-      relationshipCount: 0,
+      nodesCount: 0,
+      relationshipsCount: 0,
       type: 'PDF',
       model: model,
       fileSource: 's3 bucket',
       processingProgress: undefined,
       retryOption: '',
       retryOptionStatus: false,
+      chunkNodeCount: 0,
+      chunkRelCount: 0,
+      entityNodeCount: 0,
+      entityEntityRelCount: 0,
+      communityNodeCount: 0,
+      communityRelCount: 0,
     };
     if (url) {
       setValid(validation(bucketUrl) && isFocused);
@@ -48,7 +52,7 @@ const S3Modal: React.FC<S3ModalProps> = ({ hideModal, open }) => {
       localStorage.setItem('accesskey', accessKey);
     }
     if (accessKey.length) {
-      localStorage.setItem('secretkey', secretKey);
+      localStorage.setItem('secretkey', btoa(secretKey));
     }
     if (isValid && accessKey.trim() != '' && secretKey.trim() != '') {
       try {
@@ -56,7 +60,6 @@ const S3Modal: React.FC<S3ModalProps> = ({ hideModal, open }) => {
         setStatusMessage('Scanning...');
         const apiResponse = await urlScanAPI({
           urlParam: url.trim(),
-          userCredentials: userCredentials as UserCredentials,
           model: model,
           accessKey: accessKey.trim(),
           secretKey: secretKey.trim(),
@@ -81,7 +84,8 @@ const S3Modal: React.FC<S3ModalProps> = ({ hideModal, open }) => {
             copiedFilesData.unshift({
               name: item.fileName,
               size: item.fileSize,
-              source_url: item.url,
+              sourceUrl: item.url,
+              uploadProgress: 100,
               // total_pages: 'N/A',
               id: uuidv4(),
               ...defaultValues,
@@ -92,12 +96,13 @@ const S3Modal: React.FC<S3ModalProps> = ({ hideModal, open }) => {
             copiedFilesData.unshift({
               ...tempFileData,
               status: defaultValues.status,
-              NodesCount: defaultValues.NodesCount,
-              relationshipCount: defaultValues.relationshipCount,
-              processing: defaultValues.processing,
+              nodesCount: defaultValues.nodesCount,
+              relationshipsCount: defaultValues.relationshipsCount,
+              processingTotalTime: defaultValues.processingTotalTime,
               model: defaultValues.model,
               fileSource: defaultValues.fileSource,
               processingProgress: defaultValues.processingProgress,
+              uploadProgress: 100,
             });
           }
         });
@@ -151,55 +156,61 @@ const S3Modal: React.FC<S3ModalProps> = ({ hideModal, open }) => {
       <div className='w-full inline-block'>
         <form>
           <TextInput
-            id='url'
+            htmlAttributes={{
+              id: 'url',
+              autoFocus: true,
+              onBlur: () => setValid(validation(bucketUrl) && isFocused),
+              onKeyDown: handleKeyDown,
+              'aria-label': 'Bucket URL',
+              placeholder: 's3://data.neo4j.com/pdf/',
+            }}
             value={bucketUrl}
-            disabled={false}
+            isDisabled={false}
             label='Bucket URL'
-            aria-label='Bucket URL'
-            placeholder='s3://data.neo4j.com/pdf/'
-            autoFocus
-            fluid
-            required
+            isFluid={true}
+            isRequired={true}
             errorText={!isValid && isFocused && 'Please Fill The Valid URL'}
-            onBlur={() => setValid(validation(bucketUrl) && isFocused)}
             onChange={(e) => {
-              setisFocused(true);
+              setIsFocused(true);
               setBucketUrl(e.target.value);
             }}
-            onKeyDown={handleKeyDown}
           />
           <div className='flex justify-between items-center w-full gap-4 mt-3'>
             <TextInput
-              id='access key'
+              htmlAttributes={{
+                id: 'access key',
+                type: 'password',
+                onKeyDown: handleKeyDown,
+                'aria-label': 'Access Key',
+                placeholder: '',
+              }}
               value={accessKey}
-              disabled={false}
+              isDisabled={false}
               label='Access Key'
-              aria-label='Access Key'
               className='w-full'
-              placeholder=''
-              fluid
-              required
-              type={'password'}
+              isFluid={true}
+              isRequired={true}
               onChange={(e) => {
                 setAccessKey(e.target.value);
               }}
-              onKeyDown={handleKeyDown}
             />
             <TextInput
-              id='secret key'
+              htmlAttributes={{
+                id: 'secret key',
+                type: 'password',
+                onKeyDown: handleKeyDown,
+                'aria-label': 'Secret Key',
+                placeholder: '',
+              }}
               value={secretKey}
-              disabled={false}
+              isDisabled={false}
               label='Secret Key'
-              aria-label='Secret Key'
               className='w-full'
-              placeholder=''
-              fluid
-              required
-              type={'password'}
+              isFluid={true}
+              isRequired={true}
               onChange={(e) => {
                 setSecretKey(e.target.value);
               }}
-              onKeyDown={handleKeyDown}
             />
           </div>
         </form>

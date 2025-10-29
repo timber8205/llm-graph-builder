@@ -4,8 +4,9 @@ import { useFileContext } from '../../../context/UsersFiles';
 import { capitalize } from '../../../utils/Utils';
 import { BannerAlertProps } from '../../../types';
 import ButtonWithToolTip from '../../UI/ButtonWithToolTip';
+import { memo } from 'react';
 
-export default function RetryConfirmationDialog({
+function RetryConfirmationDialog({
   open,
   onClose,
   fileId,
@@ -26,11 +27,15 @@ export default function RetryConfirmationDialog({
   const file = filesData.find((c) => c.id === fileId);
   const RetryOptionsForFile = file?.status != 'Completed' ? RETRY_OPIONS : RETRY_OPIONS.slice(0, 2);
   return (
-    <Dialog open={open} onClose={onClose}>
+    <Dialog isOpen={open} onClose={onClose}>
       <Dialog.Header>Reprocess Options</Dialog.Header>
+      <Dialog.Description>
+        Clicking "Continue" will mark these files as "Ready to Reprocess." To proceed, click “Generate Graph” to start
+        the reprocessing process.
+      </Dialog.Description>
       <Dialog.Content>
         {alertStatus.showAlert && (
-          <Banner closeable onClose={onBannerClose} className='my-4' type={alertStatus.alertType}>
+          <Banner isCloseable onClose={onBannerClose} className='my-4' type={alertStatus.alertType} usage='inline'>
             {alertStatus.alertMessage}
           </Banner>
         )}
@@ -46,33 +51,36 @@ export default function RetryConfirmationDialog({
                     });
                   });
                 }}
-                name='retryoptions'
-                checked={o === file?.retryOption && file?.retryOptionStatus}
+                htmlAttributes={{
+                  name: 'retryoptions',
+                  onKeyDown: (e) => {
+                    if (e.code === 'Enter' && file?.retryOption.length) {
+                      retryHandler(file?.name as string, file?.retryOption as string);
+                    }
+                  },
+                }}
+                isChecked={o === file?.retryOption && file?.retryOptionStatus}
                 label={o
                   .split('_')
                   .map((s) => capitalize(s))
                   .join(' ')}
-                onKeyDown={(e) => {
-                  if (e.code === 'Enter' && file?.retryOption.length) {
-                    retryHandler(file?.name as string, file?.retryOption as string);
-                  }
-                }}
               />
             );
           })}
         </Flex>
         <Dialog.Actions>
-          <Dialog.Actions className='!mt-3'>
+          <Dialog.Actions className='mt-3!'>
             <ButtonWithToolTip
-              placement='top'
+              placement='left'
               label='Retry action button'
-              text={!file?.retryOption.length ? `Please Select One Of The Option` : 'Reset The Status To Reprocess'}
+              text={
+                !file?.retryOption.length ? `Please Select One Of The Option` : 'Reset The Status To Ready to Reprocess'
+              }
               loading={retryLoading}
               disabled={!file?.retryOption.length}
               onClick={() => {
                 retryHandler(file?.name as string, file?.retryOption as string);
               }}
-              size='large'
             >
               Continue
             </ButtonWithToolTip>
@@ -82,3 +90,4 @@ export default function RetryConfirmationDialog({
     </Dialog>
   );
 }
+export default memo(RetryConfirmationDialog);

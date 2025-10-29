@@ -1,6 +1,6 @@
 import { DataComponentProps } from '../../types';
 import { Flex, Typography } from '@neo4j-ndl/react';
-import IconButtonWithToolTip from '../UI/IconButtonToolTip';
+import { IconButtonWithToolTip } from '../UI/IconButtonToolTip';
 import { InformationCircleIconOutline } from '@neo4j-ndl/react/icons';
 import { APP_SOURCES } from '../../utils/Constants';
 import WebButton from '../DataSources/Web/WebButton';
@@ -11,8 +11,7 @@ export default function GenericButton({ openModal }: DataComponentProps) {
       <WebButton openModal={openModal} />
       <Typography variant='body-small'>
         <Flex gap='0'>
-          <span>Web Sources</span>
-          <div className='align-self-center flex justify-center'>
+          <div className='align-self-center flex! justify-center'>
             <IconButtonWithToolTip
               label='Source info'
               clean

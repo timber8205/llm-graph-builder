@@ -1,28 +1,31 @@
-import React, { useEffect, useState } from 'react';
-import { Dialog, SideNavigation, Tip, useMediaQuery } from '@neo4j-ndl/react';
+import React, { useRef, useState } from 'react';
+import { Dialog, SideNavigation, SpotlightTarget, TextLink, Tooltip, useMediaQuery } from '@neo4j-ndl/react';
 import {
   ArrowRightIconOutline,
   ArrowLeftIconOutline,
-  TrashIconOutline,
   ArrowsPointingOutIconOutline,
   ChatBubbleOvalLeftEllipsisIconOutline,
   CloudArrowUpIconSolid,
+  ArrowDownTrayIconOutline,
+  TrashIconOutline,
 } from '@neo4j-ndl/react/icons';
+
 import { SideNavProps } from '../../types';
 import Chatbot from '../ChatBot/Chatbot';
 import { createPortal } from 'react-dom';
 import { useMessageContext } from '../../context/UserMessages';
-import { getIsLoading } from '../../utils/Utils';
+import { downloadClickHandler, getIsLoading } from '../../utils/Utils';
 import ExpandedChatButtonContainer from '../ChatBot/ExpandedChatButtonContainer';
 import { APP_SOURCES, tooltips } from '../../utils/Constants';
 import ChatModeToggle from '../ChatBot/ChatModeToggle';
 import { RiChatSettingsLine } from 'react-icons/ri';
-import IconButtonWithToolTip from '../UI/IconButtonToolTip';
+import { IconButtonWithToolTip } from '../UI/IconButtonToolTip';
 import GCSButton from '../DataSources/GCS/GCSButton';
 import S3Component from '../DataSources/AWS/S3Bucket';
 import WebButton from '../DataSources/Web/WebButton';
 import DropZoneForSmallLayouts from '../DataSources/Local/DropZoneForSmallLayouts';
 import { useCredentials } from '../../context/UserCredentials';
+import TooltipWrapper from '../UI/TipWrapper';
 
 const SideNav: React.FC<SideNavProps> = ({
   position,
@@ -40,26 +43,12 @@ const SideNav: React.FC<SideNavProps> = ({
 }) => {
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const { setMessages } = useMessageContext();
-  const [chatModeAnchor, setchatModeAnchor] = useState<HTMLElement | null>(null);
-  const [showChatMode, setshowChatMode] = useState<boolean>(false);
-  const largedesktops = useMediaQuery(`(min-width:1440px )`);
+  const { setMessages, isDeleteChatLoading } = useMessageContext();
+  const [showChatMode, setShowChatMode] = useState<boolean>(false);
+  const isLargeDesktop = useMediaQuery(`(min-width:1440px )`);
   const { connectionStatus } = useCredentials();
-
-  const date = new Date();
-  useEffect(() => {
-    if (clearHistoryData) {
-      setMessages([
-        {
-          datetime: `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`,
-          id: 2,
-          message:
-            ' Welcome to the Neo4j Knowledge Graph Chat. You can ask questions related to documents which have been completely processed.',
-          user: 'chatbot',
-        },
-      ]);
-    }
-  }, [clearHistoryData]);
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null);
+  const anchorMenuRef = useRef<HTMLAnchorElement>(null);
 
   const handleExpandClick = () => {
     setIsChatModalOpen(true);
@@ -72,151 +61,209 @@ const SideNav: React.FC<SideNavProps> = ({
   const handleShrinkClick = () => {
     setIsChatModalOpen(false);
     setIsFullScreen(false);
-    if (setShowDrawerChatbot && setIsRightExpanded && largedesktops) {
+    if (setShowDrawerChatbot && setIsRightExpanded && isLargeDesktop) {
       setShowDrawerChatbot(true);
       setIsRightExpanded(true);
     }
   };
   const handleClick = () => {
-    if (!largedesktops && position === 'right') {
+    if (!isLargeDesktop && position === 'right') {
       setIsChatModalOpen(true);
       setIsFullScreen(true);
-    } else if (!largedesktops && position === 'left') {
+    } else if (!isLargeDesktop && position === 'left') {
       setIsleftExpanded && setIsleftExpanded(false);
     } else {
       toggleDrawer();
     }
   };
+
+  const renderDataSourceItems = () => {
+    const dataSourceItems = [];
+
+    if (!isLargeDesktop && position === 'left') {
+      dataSourceItems.push(
+        <SpotlightTarget id='dropzone' indicatorVariant='point' indicatorPlacement='middle-right'>
+          <SideNavigation.Item
+            key='local'
+            icon={
+              <TooltipWrapper tooltip='Local Files' placement='right'>
+                <DropZoneForSmallLayouts />
+              </TooltipWrapper>
+            }
+          />
+        </SpotlightTarget>
+      );
+
+      if (APP_SOURCES.includes('gcs') && position === 'left') {
+        dataSourceItems.push(
+          <SideNavigation.Item
+            key='gcs'
+            icon={
+              <TooltipWrapper tooltip='GCS Files' placement='right'>
+                <GCSButton isLargeDesktop={false} openModal={toggleGCSModal} isDisabled={!connectionStatus}></GCSButton>
+              </TooltipWrapper>
+            }
+          />
+        );
+      }
+
+      if (APP_SOURCES.includes('s3') && position === 'left') {
+        dataSourceItems.push(
+          <SideNavigation.Item
+            key='s3'
+            icon={
+              <TooltipWrapper tooltip='S3 Files' placement='right'>
+                <S3Component
+                  isLargeDesktop={false}
+                  openModal={toggles3Modal}
+                  isDisabled={!connectionStatus}
+                ></S3Component>
+              </TooltipWrapper>
+            }
+          />
+        );
+      }
+
+      if (APP_SOURCES.includes('web') && position === 'left') {
+        dataSourceItems.push(
+          <SideNavigation.Item
+            key='web'
+            icon={
+              <TooltipWrapper tooltip='Web Sources' placement='right'>
+                <WebButton
+                  isLargeDesktop={false}
+                  openModal={toggleGenericModal}
+                  isDisabled={!connectionStatus}
+                ></WebButton>
+              </TooltipWrapper>
+            }
+          />
+        );
+      }
+    }
+    return dataSourceItems;
+  };
+
   return (
-    <div style={{ height: 'calc(100vh - 58px)', minHeight: '200px', display: 'flex' }}>
-      <SideNavigation iconMenu={true} expanded={false} position={position}>
+    <div className='sidenav-container'>
+      <SideNavigation hasIconMenu={true} isExpanded={false} position={position}>
         <SideNavigation.List>
-          {isExpanded && largedesktops && (
+          {isExpanded && isLargeDesktop && (
             <SideNavigation.Item
-              onClick={handleClick}
-              icon={position === 'left' ? <ArrowLeftIconOutline /> : <ArrowRightIconOutline />}
+              htmlAttributes={{ onClick: handleClick }}
+              icon={
+                position === 'left' ? (
+                  <ArrowLeftIconOutline className='n-size-token-7' />
+                ) : (
+                  <ArrowRightIconOutline className='n-size-token-7' />
+                )
+              }
             />
           )}
-          {!isExpanded && position === 'left' && largedesktops && (
+          {!isExpanded && position === 'left' && isLargeDesktop && (
             <SideNavigation.Item
-              onClick={handleClick}
+              htmlAttributes={{ onClick: handleClick }}
               icon={
-                <Tip allowedPlacements={['right']}>
-                  <Tip.Trigger>
-                    <CloudArrowUpIconSolid />
-                  </Tip.Trigger>
-                  <Tip.Content>{tooltips.sources}</Tip.Content>
-                </Tip>
+                <TooltipWrapper tooltip={tooltips.sources} placement='right'>
+                  <CloudArrowUpIconSolid className='n-size-token-7' />
+                </TooltipWrapper>
               }
             />
           )}
 
           {position === 'right' && !isExpanded && (
-            <SideNavigation.Item
-              onClick={handleClick}
-              icon={
-                <Tip allowedPlacements={['left']}>
-                  <Tip.Trigger>
-                    <ChatBubbleOvalLeftEllipsisIconOutline />
-                  </Tip.Trigger>
-                  <Tip.Content>{tooltips.chat}</Tip.Content>
-                </Tip>
-              }
-            />
+            <SpotlightTarget id='chatbtn' indicatorVariant='point' indicatorPlacement='middle-left'>
+              <SideNavigation.Item
+                htmlAttributes={{ onClick: handleClick }}
+                icon={
+                  <TooltipWrapper tooltip={tooltips.chat} placement='left'>
+                    <ChatBubbleOvalLeftEllipsisIconOutline className='n-size-token-7' />
+                  </TooltipWrapper>
+                }
+              />
+            </SpotlightTarget>
           )}
-
-          {!largedesktops && position === 'left' && (
-            <SideNavigation.Item
-              icon={
-                <Tip allowedPlacements={['right']}>
-                  <Tip.Trigger>
-                    <DropZoneForSmallLayouts />
-                  </Tip.Trigger>
-                  <Tip.Content>Local files</Tip.Content>
-                </Tip>
-              }
-            />
-          )}
-          {!largedesktops && APP_SOURCES.includes('gcs') && position === 'left' && (
-            <SideNavigation.Item
-              icon={
-                <Tip allowedPlacements={['right']}>
-                  <Tip.Trigger>
-                    <GCSButton isLargeDesktop={largedesktops} openModal={toggleGCSModal}></GCSButton>
-                  </Tip.Trigger>
-                  <Tip.Content>GCS Files</Tip.Content>
-                </Tip>
-              }
-            />
-          )}
-          {!largedesktops && APP_SOURCES.includes('s3') && position === 'left' && (
-            <SideNavigation.Item
-              icon={
-                <Tip allowedPlacements={['right']}>
-                  <Tip.Trigger>
-                    <S3Component isLargeDesktop={largedesktops} openModal={toggles3Modal}></S3Component>
-                  </Tip.Trigger>
-                  <Tip.Content>S3 Files</Tip.Content>
-                </Tip>
-              }
-            />
-          )}
-          {!largedesktops && APP_SOURCES.includes('web') && position === 'left' && (
-            <SideNavigation.Item
-              icon={
-                <Tip allowedPlacements={['right']}>
-                  <Tip.Trigger>
-                    <WebButton isLargeDesktop={largedesktops} openModal={toggleGenericModal}></WebButton>
-                  </Tip.Trigger>
-                  <Tip.Content>Web Sources</Tip.Content>
-                </Tip>
-              }
-            ></SideNavigation.Item>
-          )}
+          {renderDataSourceItems()}
           {position === 'right' && isExpanded && (
             <>
-              <Tip allowedPlacements={['left']}>
+              <Tooltip type='simple' placement={'left'}>
                 <SideNavigation.Item
-                  onClick={deleteOnClick}
+                  htmlAttributes={{ onClick: deleteOnClick }}
                   icon={
                     <>
-                      <Tip.Trigger>
-                        <TrashIconOutline />
-                      </Tip.Trigger>
-                      <Tip.Content>{tooltips.clearChat}</Tip.Content>
+                      <Tooltip.Trigger>
+                        <TrashIconOutline className='n-size-token-7' />
+                      </Tooltip.Trigger>
+                      <Tooltip.Content>{tooltips.clearChat}</Tooltip.Content>
                     </>
                   }
                 />
-              </Tip>
-              <Tip allowedPlacements={['left']}>
+              </Tooltip>
+              <Tooltip type='simple' placement={'left'}>
                 <SideNavigation.Item
-                  onClick={handleExpandClick}
+                  htmlAttributes={{ onClick: handleExpandClick }}
                   icon={
                     <>
-                      <Tip.Trigger>
+                      <Tooltip.Trigger>
                         <ArrowsPointingOutIconOutline className='n-size-token-7' />
-                      </Tip.Trigger>
-                      <Tip.Content>{tooltips.maximise}</Tip.Content>
+                      </Tooltip.Trigger>
+                      <Tooltip.Content>{tooltips.maximise}</Tooltip.Content>
                     </>
                   }
                 />
-              </Tip>
-              {!isChatModalOpen && (
+              </Tooltip>
+              <Tooltip type='simple' placement={'left'}>
                 <SideNavigation.Item
-                  onClick={(e) => {
-                    setchatModeAnchor(e.currentTarget);
-                    setshowChatMode(true);
+                  htmlAttributes={{
+                    onClick: () => {
+                      downloadClickHandler(
+                        { conversation: messages },
+                        downloadLinkRef,
+                        'graph-builder-conversation.json'
+                      );
+                    },
                   }}
                   icon={
                     <>
-                      <IconButtonWithToolTip size='small' placement='left' clean label='Chat mode' text='Chat mode'>
+                      <Tooltip.Trigger>
+                        <ArrowDownTrayIconOutline className='n-size-token-7' />
+                      </Tooltip.Trigger>
+                      <Tooltip.Content>
+                        Download Conversation
+                        <TextLink ref={downloadLinkRef} className='hidden!'>
+                          ""
+                        </TextLink>
+                      </Tooltip.Content>
+                    </>
+                  }
+                />
+              </Tooltip>
+              {!isChatModalOpen && (
+                <SideNavigation.Item
+                  ref={anchorMenuRef}
+                  icon={
+                    <>
+                      <IconButtonWithToolTip
+                        onClick={() => {
+                          setShowChatMode(true);
+                        }}
+                        size='small'
+                        placement='left'
+                        clean
+                        label='Chat mode'
+                        text='Chat mode'
+                      >
                         <RiChatSettingsLine className='n-size-token-7' />
                       </IconButtonWithToolTip>
                       <ChatModeToggle
                         open={showChatMode}
-                        closeHandler={() => setshowChatMode(false)}
-                        menuAnchor={chatModeAnchor}
-                        disableBackdrop={true}
+                        closeHandler={(_, reason) => {
+                          if (reason.type === 'backdropClick') {
+                            setShowChatMode(false);
+                          }
+                        }}
+                        menuAnchor={anchorMenuRef}
+                        isRoot={false}
                       ></ChatModeToggle>
                     </>
                   }
@@ -233,12 +280,13 @@ const SideNav: React.FC<SideNavProps> = ({
               id: 'Chatbot-popup',
               className: 'n-p-token-4 n-rounded-lg h-[90%]',
             }}
-            open={isChatModalOpen}
+            isOpen={isChatModalOpen}
             size='unset'
-            disableCloseButton={true}
+            hasDisabledCloseButton={true}
           >
-            <Dialog.Header className='flex justify-between self-end' id='chatbot-dialog-title'>
+            <Dialog.Header className='flex justify-between self-end' htmlAttributes={{ id: 'chatbot-dialog-title' }}>
               <ExpandedChatButtonContainer
+                isFullScreen={isFullScreen}
                 closeChatBot={handleShrinkClick}
                 deleteOnClick={deleteOnClick}
                 messages={messages ?? []}
@@ -252,6 +300,7 @@ const SideNav: React.FC<SideNavProps> = ({
                 setMessages={setMessages}
                 isLoading={getIsLoading(messages ?? [])}
                 connectionStatus={connectionStatus}
+                isDeleteChatLoading={isDeleteChatLoading}
               />
             </Dialog.Content>
           </Dialog>,

@@ -1,4 +1,4 @@
-import { Box, Checkbox, Flex, Typography } from '@neo4j-ndl/react';
+import { Checkbox, Flex, Typography } from '@neo4j-ndl/react';
 import { DocumentTextIconOutline } from '@neo4j-ndl/react/icons';
 import { LargefilesProps } from '../../../types';
 import { List, ListItem, ListItemAvatar, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
@@ -16,7 +16,7 @@ import s3logo from '../../../assets/images/s3logo.png';
 import { calculateProcessingTime } from '../../../utils/Utils';
 import { ThemeWrapperContext } from '../../../context/ThemeWrapper';
 
-const LargeFilesAlert: FC<LargefilesProps> = ({ largeFiles, handleToggle, checked }) => {
+const LargeFilesAlert: FC<LargefilesProps> = ({ Files, handleToggle, checked }) => {
   const { colorMode } = useContext(ThemeWrapperContext);
 
   const imageIcon: Record<string, string> = useMemo(
@@ -30,28 +30,28 @@ const LargeFilesAlert: FC<LargefilesProps> = ({ largeFiles, handleToggle, checke
     [colorMode]
   );
   return (
-    <Box className='n-bg-palette-neutral-bg-weak p-4'>
-      <Box className='flex flex-row pb-6 items-center mb-2'>
+    <div className='n-bg-palette-neutral-bg-weak p-4'>
+      <div className='flex! flex-row pb-6 items-center mb-2'>
         <img
           style={{ width: 95, height: 95, marginRight: 10, alignSelf: 'flex-start' }}
           src={BellImage}
           alt='alert icon'
         />
-        <Box className='flex flex-col'>
+        <div className='flex flex-col'>
           <Typography variant='h3'>Large Document Notice</Typography>
-          <Typography variant='body-medium' sx={{ mb: 2 }}>
+          <Typography variant='body-medium'>
             One or more of your selected documents are large and may take extra time to process. Please review the
             estimated times below
           </Typography>
           <List className='max-h-80 overflow-y-auto'>
-            {largeFiles.map((f, i) => {
+            {Files.map((f, i) => {
               const { minutes, seconds } = calculateProcessingTime(f.size as number, 0.2);
               return (
                 <ListItem key={i} disablePadding>
                   <ListItemButton role={undefined} dense>
                     <ListItemIcon>
                       <Checkbox
-                        aria-label='selection checkbox'
+                        ariaLabel='selection checkbox'
                         onChange={(e) => {
                           if (e.target.checked) {
                             handleToggle(true, f.id);
@@ -59,13 +59,13 @@ const LargeFilesAlert: FC<LargefilesProps> = ({ largeFiles, handleToggle, checke
                             handleToggle(false, f.id);
                           }
                         }}
-                        checked={checked.indexOf(f.id) !== -1}
-                        tabIndex={-1}
+                        isChecked={checked.indexOf(f.id) !== -1}
+                        htmlAttributes={{ tabIndex: -1 }}
                       />
                     </ListItemIcon>
                     <ListItemAvatar>
                       {imageIcon[f.fileSource] ? (
-                        <img width={20} height={20} src={imageIcon[f.fileSource]}></img>
+                        <img width={20} height={20} src={imageIcon[f.fileSource]} alt='source-logo'></img>
                       ) : (
                         <DocumentTextIconOutline className='n-size-token-7 mr-2' />
                       )}
@@ -78,8 +78,8 @@ const LargeFilesAlert: FC<LargefilesProps> = ({ largeFiles, handleToggle, checke
                             {f.fileSource === 'local file' && minutes === 0 && typeof f.size === 'number'
                               ? `- ${seconds} Sec `
                               : f.fileSource === 'local file'
-                              ? `- ${minutes} Min`
-                              : ''}
+                                ? `- ${minutes} Min`
+                                : ''}
                           </span>
                           {typeof f.size === 'number' && f.size > chunkSize ? (
                             <span>
@@ -96,9 +96,9 @@ const LargeFilesAlert: FC<LargefilesProps> = ({ largeFiles, handleToggle, checke
               );
             })}
           </List>
-        </Box>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 };
 export default LargeFilesAlert;

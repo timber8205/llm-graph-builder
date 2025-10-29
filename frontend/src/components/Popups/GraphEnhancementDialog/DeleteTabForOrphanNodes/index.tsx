@@ -1,6 +1,6 @@
-import { Checkbox, DataGrid, DataGridComponents, Flex, Typography, useMediaQuery } from '@neo4j-ndl/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { UserCredentials, orphanNodeProps } from '../../../../types';
+import { Checkbox, DataGrid, DataGridComponents, Flex, Typography, useMediaQuery, Button } from '@neo4j-ndl/react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { orphanNodeProps } from '../../../../types';
 import { getOrphanNodes } from '../../../../services/GetOrphanNodes';
 import { useCredentials } from '../../../../context/UserCredentials';
 import Legend from '../../../UI/Legend';
@@ -19,6 +19,10 @@ import {
 } from '@tanstack/react-table';
 import DeletePopUp from '../../DeletePopUp/DeletePopUp';
 import { tokens } from '@neo4j-ndl/base';
+import GraphViewModal from '../../../Graph/GraphViewModal';
+import { handleGraphNodeClick } from '../../../ChatBot/chatInfo';
+import { ThemeWrapperContext } from '../../../../context/ThemeWrapper';
+
 export default function DeletePopUpForOrphanNodes({
   deleteHandler,
   loading,
@@ -34,12 +38,17 @@ export default function DeletePopUpForOrphanNodes({
   const { userCredentials } = useCredentials();
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const tableRef = useRef(null);
-  const [showDeletePopUp, setshowDeletePopUp] = useState<boolean>(false);
-
+  const [showDeletePopUp, setShowDeletePopUp] = useState<boolean>(false);
+  const [neoNodes, setNeoNodes] = useState<any[]>([]);
+  const [neoRels, setNeoRels] = useState<any[]>([]);
+  const [openGraphView, setOpenGraphView] = useState(false);
+  const [viewPoint, setViewPoint] = useState('');
+  const { colorMode } = useContext(ThemeWrapperContext);
+  const ref = useRef<AbortController>();
   const fetchOrphanNodes = useCallback(async () => {
     try {
       setLoading(true);
-      const apiresponse = await getOrphanNodes(userCredentials as UserCredentials);
+      const apiresponse = await getOrphanNodes(ref.current?.signal as AbortSignal);
       setLoading(false);
       if (apiresponse.data.data.length) {
         setOrphanNodes(apiresponse.data.data);
@@ -53,18 +62,26 @@ export default function DeletePopUpForOrphanNodes({
       setLoading(false);
       console.log(error);
     }
-  }, [userCredentials]);
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      await fetchOrphanNodes();
-    })();
+    ref.current = new AbortController();
+    if (userCredentials != null) {
+      (async () => {
+        await fetchOrphanNodes();
+      })();
+    }
     return () => {
       setOrphanNodes([]);
       setTotalOrphanNodes(0);
+      ref?.current?.abort();
     };
   }, [userCredentials]);
   const columnHelper = createColumnHelper<orphanNodeProps>();
+
+  const handleOrphanNodeClick = (elementId: string, viewMode: string) => {
+    handleGraphNodeClick(elementId, viewMode, setNeoNodes, setNeoRels, setOpenGraphView, setViewPoint);
+  };
 
   const columns = useMemo(
     () => [
@@ -73,8 +90,8 @@ export default function DeletePopUpForOrphanNodes({
         header: ({ table }: { table: Table<orphanNodeProps> }) => {
           return (
             <Checkbox
-              aria-label='header-checkbox'
-              checked={table.getIsAllRowsSelected()}
+              ariaLabel='header-checkbox'
+              isChecked={table.getIsAllRowsSelected()}
               onChange={table.getToggleAllRowsSelectedHandler()}
             />
           );
@@ -83,10 +100,10 @@ export default function DeletePopUpForOrphanNodes({
           return (
             <div className='px-1'>
               <Checkbox
-                aria-label='row-checkbox'
+                ariaLabel='row-checkbox'
                 onChange={row.getToggleSelectedHandler()}
-                title='Select the Row for Deletion'
-                checked={row.getIsSelected()}
+                htmlAttributes={{ title: 'Select the Row for Deletion' }}
+                isChecked={row.getIsSelected()}
               />
             </div>
           );
@@ -98,7 +115,16 @@ export default function DeletePopUpForOrphanNodes({
         cell: (info) => {
           return (
             <div className='textellipsis'>
-              <span title={info.getValue()}>{info.getValue()}</span>
+              <Button
+                className='cursor-pointer! inline!'
+                fill='text'
+                onClick={() => handleOrphanNodeClick(info.row.id, 'chatInfoView')}
+                htmlAttributes={{
+                  title: info.getValue() ? info.getValue() : info.row.id,
+                }}
+              >
+                {info.getValue() ? info.getValue() : info.row.id}
+              </Button>
             </div>
           );
         },
@@ -110,8 +136,8 @@ export default function DeletePopUpForOrphanNodes({
         cell: (info) => {
           return (
             <Flex>
-              {info.getValue().map((l, index) => (
-                <Legend key={index} title={l} bgColor={calcWordColor(l)} type='node'></Legend>
+              {info.getValue().map((l) => (
+                <Legend key={l} title={l} bgColor={calcWordColor(l)} type='node'></Legend>
               ))}
             </Flex>
           );
@@ -120,7 +146,7 @@ export default function DeletePopUpForOrphanNodes({
         footer: (info) => info.column.id,
       }),
       columnHelper.accessor((row) => row.documents, {
-        id: 'Connnected Documents',
+        id: 'Connected Documents',
         cell: (info) => {
           return (
             <Flex className='textellipsis'>
@@ -183,101 +209,118 @@ export default function DeletePopUpForOrphanNodes({
       const eid: string = selectedRows[index];
       setOrphanNodes((prev) => prev.filter((node) => node.e.elementId != eid));
     }
-    setshowDeletePopUp(false);
+    setShowDeletePopUp(false);
     if (totalOrphanNodes) {
       await fetchOrphanNodes();
     }
   };
 
   return (
-    <div>
-      {showDeletePopUp && (
-        <DeletePopUp
-          open={showDeletePopUp}
-          no_of_files={table.getSelectedRowModel().rows.length ?? 0}
-          deleteHandler={onDeleteHandler}
-          deleteCloseHandler={() => setshowDeletePopUp(false)}
-          loading={loading}
-          view='settingsView'
-        />
-      )}
+    <>
       <div>
-        <Flex flexDirection='column'>
-          <Flex justifyContent='space-between' flexDirection='row'>
-            <Typography variant={isTablet ? 'subheading-medium' : 'subheading-large'}>
-              Orphan Nodes Deletion (100 nodes per batch)
-            </Typography>
-            {totalOrphanNodes > 0 && (
+        {showDeletePopUp && (
+          <DeletePopUp
+            open={showDeletePopUp}
+            no_of_files={table.getSelectedRowModel().rows.length ?? 0}
+            deleteHandler={onDeleteHandler}
+            deleteCloseHandler={() => setShowDeletePopUp(false)}
+            loading={loading}
+            view='settingsView'
+          />
+        )}
+        <div>
+          <Flex flexDirection='column'>
+            <Flex justifyContent='space-between' flexDirection='row'>
               <Typography variant={isTablet ? 'subheading-medium' : 'subheading-large'}>
-                Total Nodes: {totalOrphanNodes}
+                Orphan Nodes Deletion (100 nodes per batch)
               </Typography>
-            )}
+              {totalOrphanNodes > 0 && (
+                <Typography variant={isTablet ? 'subheading-medium' : 'subheading-large'}>
+                  Total Nodes: {totalOrphanNodes}
+                </Typography>
+              )}
+            </Flex>
+            <Flex justifyContent='space-between' flexDirection='row'>
+              <Typography variant={isTablet ? 'body-small' : 'body-medium'}>
+                This feature helps improve the accuracy of your knowledge graph by identifying and removing entities
+                that are not connected to any other information. These "lonely" entities can be remnants of past
+                analyses or errors in data processing. By removing them, we can create a cleaner and more efficient
+                knowledge graph that leads to more relevant and informative responses.
+              </Typography>
+            </Flex>
           </Flex>
-          <Flex justifyContent='space-between' flexDirection='row'>
-            <Typography variant={isTablet ? 'body-small' : 'body-medium'}>
-              This feature helps improve the accuracy of your knowledge graph by identifying and removing entities that
-              are not connected to any other information. These "lonely" entities can be remnants of past analyses or
-              errors in data processing. By removing them, we can create a cleaner and more efficient knowledge graph
-              that leads to more relevant and informative responses.
-            </Typography>
-          </Flex>
-        </Flex>
-      </div>
-      <DataGrid
-        ref={tableRef}
-        isResizable={true}
-        tableInstance={table}
-        styling={{
-          borderStyle: 'all-sides',
-          zebraStriping: true,
-          headerStyle: 'clean',
-        }}
-        rootProps={{
-          className: 'max-h-[355px] !overflow-y-auto',
-        }}
-        isLoading={isLoading}
-        components={{
-          Body: (props) => <DataGridComponents.Body {...props} />,
-          PaginationNumericButton: ({ isSelected, innerProps, ...restProps }) => {
-            return (
-              <DataGridComponents.PaginationNumericButton
-                {...restProps}
-                isSelected={isSelected}
+        </div>
+        <DataGrid
+          ref={tableRef}
+          isResizable={true}
+          tableInstance={table}
+          styling={{
+            borderStyle: 'all-sides',
+            hasZebraStriping: true,
+            headerStyle: 'clean',
+          }}
+          rootProps={{
+            className: 'max-h-[355px] overflow-y-auto!',
+          }}
+          isLoading={isLoading}
+          components={{
+            Body: () => (
+              <DataGridComponents.Body
                 innerProps={{
-                  ...innerProps,
-                  style: {
-                    ...(isSelected && {
-                      backgroundSize: '200% auto',
-                      borderRadius: '10px',
-                    }),
-                  },
+                  className: colorMode == 'dark' ? 'tbody-dark' : 'tbody-light',
                 }}
               />
-            );
-          },
-        }}
-      />
-      <Flex className='mt-3' flexDirection='row' justifyContent='flex-end'>
-        <ButtonWithToolTip
-          onClick={() => setshowDeletePopUp(true)}
-          size='large'
-          loading={loading}
-          text={
-            isLoading
-              ? 'Fetching Orphan Nodes'
-              : !isLoading && !orphanNodes.length
-              ? 'No Nodes Found'
-              : !table.getSelectedRowModel().rows.length
-              ? 'No Nodes Selected'
-              : `Delete Selected Nodes (${table.getSelectedRowModel().rows.length})`
-          }
-          label='Orphan Node deletion button'
-          disabled={!table.getSelectedRowModel().rows.length}
-          placement='top'
-        >
-          {selectedFilesCheck}
-        </ButtonWithToolTip>
-      </Flex>
-    </div>
+            ),
+            PaginationNumericButton: ({ isSelected, innerProps, ...restProps }) => {
+              return (
+                <DataGridComponents.PaginationNumericButton
+                  {...restProps}
+                  isSelected={isSelected}
+                  innerProps={{
+                    ...innerProps,
+                    style: {
+                      ...(isSelected && {
+                        backgroundSize: '200% auto',
+                        borderRadius: '10px',
+                      }),
+                    },
+                  }}
+                />
+              );
+            },
+          }}
+          isKeyboardNavigable={false}
+        />
+        <Flex className='mt-3' flexDirection='row' justifyContent='flex-end'>
+          <ButtonWithToolTip
+            onClick={() => setShowDeletePopUp(true)}
+            loading={loading}
+            text={
+              isLoading
+                ? 'Fetching Orphan Nodes'
+                : !isLoading && !orphanNodes.length
+                  ? 'No Nodes Found'
+                  : !table.getSelectedRowModel().rows.length
+                    ? 'No Nodes Selected'
+                    : `Delete Selected Nodes (${table.getSelectedRowModel().rows.length})`
+            }
+            label='Orphan Node deletion button'
+            disabled={!table.getSelectedRowModel().rows.length}
+            placement='top'
+          >
+            {selectedFilesCheck}
+          </ButtonWithToolTip>
+        </Flex>
+      </div>
+      {openGraphView && (
+        <GraphViewModal
+          open={openGraphView}
+          setGraphViewOpen={setOpenGraphView}
+          viewPoint={viewPoint}
+          nodeValues={neoNodes}
+          relationshipValues={neoRels}
+        />
+      )}
+    </>
   );
 }

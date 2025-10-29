@@ -1,6 +1,5 @@
 import { TextInput } from '@neo4j-ndl/react';
-import { useCallback, useEffect, useState } from 'react';
-import { useCredentials } from '../../../context/UserCredentials';
+import { useCallback, useState } from 'react';
 import { useFileContext } from '../../../context/UsersFiles';
 import { urlScanAPI } from '../../../services/URLScan';
 import { CustomFileBase, GCSModalProps, fileName, nonoautherror } from '../../../types';
@@ -9,48 +8,42 @@ import CustomModal from '../../../HOC/CustomModal';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAlertContext } from '../../../context/Alert';
 import { buttonCaptions } from '../../../utils/Constants';
-import { showErrorToast, showNormalToast } from '../../../utils/toasts';
+import { showErrorToast, showNormalToast } from '../../../utils/Toasts';
 
 const GCSModal: React.FC<GCSModalProps> = ({ hideModal, open, openGCSModal }) => {
-  const [bucketName, setbucketName] = useState<string>('');
+  const [bucketName, setBucketName] = useState<string>('');
   const [folderName, setFolderName] = useState<string>('');
-  const [projectId, setprojectId] = useState<string>('');
+  const [projectId, setProjectId] = useState<string>('');
   const [status, setStatus] = useState<'unknown' | 'success' | 'info' | 'warning' | 'danger'>('unknown');
   const [statusMessage, setStatusMessage] = useState<string>('');
-  const { userCredentials } = useCredentials();
   const { showAlert } = useAlertContext();
 
   const { setFilesData, model, filesData } = useFileContext();
 
   const defaultValues: CustomFileBase = {
-    processing: 0,
+    processingTotalTime: 0,
     status: 'New',
-    NodesCount: 0,
-    relationshipCount: 0,
+    nodesCount: 0,
+    relationshipsCount: 0,
     type: 'TEXT',
     model: model,
     fileSource: 'gcs bucket',
     processingProgress: undefined,
     retryOption: '',
     retryOptionStatus: false,
+    chunkNodeCount: 0,
+    chunkRelCount: 0,
+    entityNodeCount: 0,
+    entityEntityRelCount: 0,
+    communityNodeCount: 0,
+    communityRelCount: 0,
   };
 
   const reset = () => {
-    setbucketName('');
+    setBucketName('');
     setFolderName('');
-    setprojectId('');
+    setProjectId('');
   };
-
-  useEffect(() => {
-    if (status != 'unknown') {
-      setTimeout(() => {
-        setStatusMessage('');
-        setStatus('unknown');
-        reset();
-        hideModal();
-      }, 5000);
-    }
-  }, []);
 
   const googleLogin = useGoogleLogin({
     onSuccess: async (codeResponse) => {
@@ -59,7 +52,6 @@ const GCSModal: React.FC<GCSModalProps> = ({ hideModal, open, openGCSModal }) =>
         setStatusMessage('Loading...');
         openGCSModal();
         const apiResponse = await urlScanAPI({
-          userCredentials,
           model,
           accessKey: '',
           secretKey: '',
@@ -101,10 +93,11 @@ const GCSModal: React.FC<GCSModalProps> = ({ hideModal, open, openGCSModal }) =>
                 size: item.fileSize ?? 0,
                 gcsBucket: item.gcsBucketName,
                 gcsBucketFolder: item.gcsBucketFolder,
-                google_project_id: item.gcsProjectId,
+                googleProjectId: item.gcsProjectId,
                 id: uuidv4(),
-                access_token: codeResponse.access_token,
+                accessToken: codeResponse.access_token,
                 ...defaultValues,
+                uploadProgress: 100,
               });
             } else {
               const tempFileData = copiedFilesData[filedataIndex];
@@ -112,13 +105,14 @@ const GCSModal: React.FC<GCSModalProps> = ({ hideModal, open, openGCSModal }) =>
               copiedFilesData.unshift({
                 ...tempFileData,
                 status: defaultValues.status,
-                NodesCount: defaultValues.NodesCount,
-                relationshipCount: defaultValues.relationshipCount,
-                processing: defaultValues.processing,
+                nodesCount: defaultValues.nodesCount,
+                relationshipsCount: defaultValues.relationshipsCount,
+                processingTotalTime: defaultValues.processingTotalTime,
                 model: defaultValues.model,
                 fileSource: defaultValues.fileSource,
                 processingProgress: defaultValues.processingProgress,
-                access_token: codeResponse.access_token,
+                accessToken: codeResponse.access_token,
+                uploadProgress: 100,
               });
             }
           }
@@ -193,48 +187,55 @@ const GCSModal: React.FC<GCSModalProps> = ({ hideModal, open, openGCSModal }) =>
       <div className='w-full inline-block'>
         <form>
           <TextInput
-            id='project id'
-            value={projectId}
-            disabled={false}
-            label='Project ID'
-            aria-label='Project ID'
-            placeholder=''
-            autoFocus
-            fluid
-            required
-            onChange={(e) => {
-              setprojectId(e.target.value);
+            htmlAttributes={{
+              id: 'project id',
+              autoFocus: true,
+              onKeyDown: handleKeyPress,
+              'aria-label': 'Project ID',
+              placeholder: '',
             }}
-            onKeyDown={handleKeyPress}
+            value={projectId}
+            isDisabled={false}
+            label='Project ID'
+            isFluid={true}
+            isRequired={true}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+            }}
           ></TextInput>
           <TextInput
-            id='bucketname'
-            value={bucketName}
-            disabled={false}
-            label='Bucket Name'
-            aria-label='Bucket Name'
-            placeholder=''
-            autoFocus
-            fluid
-            required
-            onChange={(e) => {
-              setbucketName(e.target.value);
+            htmlAttributes={{
+              id: 'bucketname',
+              autoFocus: true,
+              onKeyDown: handleKeyPress,
+              'aria-label': 'Bucket Name',
+              placeholder: '',
             }}
-            onKeyDown={handleKeyPress}
+            value={bucketName}
+            isDisabled={false}
+            label='Bucket Name'
+            isFluid={true}
+            isRequired={true}
+            onChange={(e) => {
+              setBucketName(e.target.value);
+            }}
           />
           <TextInput
-            id='foldername'
+            htmlAttributes={{
+              id: 'foldername',
+              autoFocus: true,
+              onKeyDown: handleKeyPress,
+              'aria-label': 'Folder Name',
+              placeholder: '',
+            }}
             value={folderName}
-            disabled={false}
+            isDisabled={false}
             label='Folder Name'
-            aria-label='Folder Name'
             helpText='Optional'
-            placeholder=''
-            fluid
+            isFluid={true}
             onChange={(e) => {
               setFolderName(e.target.value);
             }}
-            onKeyDown={handleKeyPress}
           />
         </form>
       </div>

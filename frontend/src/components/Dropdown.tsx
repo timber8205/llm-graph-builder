@@ -1,7 +1,8 @@
-import { Dropdown, Tip } from '@neo4j-ndl/react';
+import { Tooltip, useMediaQuery, Select, SpotlightTarget } from '@neo4j-ndl/react';
 import { OptionType, ReusableDropdownProps } from '../types';
-import { useMemo, useReducer } from 'react';
-import { capitalize } from '../utils/Utils';
+import { memo, useMemo } from 'react';
+import { capitalize, capitalizeWithUnderscore } from '../utils/Utils';
+import { prodllms } from '../utils/Constants';
 
 const DropdownComponent: React.FC<ReusableDropdownProps> = ({
   options,
@@ -13,59 +14,68 @@ const DropdownComponent: React.FC<ReusableDropdownProps> = ({
   isDisabled,
   value,
 }) => {
-  const [disableTooltip, toggleDisableState] = useReducer((state) => !state, false);
+  const isProdEnv = process.env.VITE_ENV === 'PROD';
+  const isLargeDesktop = useMediaQuery(`(min-width:1440px )`);
   const handleChange = (selectedOption: OptionType | null | void) => {
     onSelect(selectedOption);
+    const existingModel = localStorage.getItem('selectedModel');
+    if (existingModel != selectedOption?.value) {
+      localStorage.setItem('selectedModel', selectedOption?.value ?? '');
+    }
   };
   const allOptions = useMemo(() => options, [options]);
   return (
     <>
       <div className={view === 'ContentView' ? 'w-[150px]' : ''}>
-        <Tip allowedPlacements={['top']} isDisabled={disableTooltip}>
-          <Tip.Trigger>
-            <Dropdown
-              type='select'
-              aria-label='A selection dropdown'
-              label='LLM Models'
-              selectProps={{
-                onChange: handleChange,
-                options: allOptions?.map((option) => {
-                  const label =
-                    typeof option === 'string'
-                      ? (option.includes('LLM_MODEL_CONFIG_')
-                          ? capitalize(option.split('LLM_MODEL_CONFIG_').at(-1) as string)
-                          : capitalize(option)
-                        )
-                          .split('_')
-                          .join(' ')
-                      : capitalize(option.label);
-                  const value = typeof option === 'string' ? option : option.value;
-                  return {
-                    label,
-                    value,
-                  };
-                }),
-                placeholder: placeholder || 'Select an option',
-                defaultValue: defaultValue ? { label: capitalize(defaultValue), value: defaultValue } : undefined,
-                menuPlacement: 'auto',
-                isDisabled: isDisabled,
-                value: value,
-                onMenuOpen: () => {
-                  toggleDisableState();
-                },
-                onMenuClose: () => {
-                  toggleDisableState();
-                },
-              }}
-              size='medium'
-              fluid
-            />
-          </Tip.Trigger>
-          <Tip.Content>LLM Model used for Extraction & Chat</Tip.Content>
-        </Tip>
+        <SpotlightTarget id='llmdropdown'>
+          <Select
+            type='select'
+            aria-label='llm-dropdown'
+            label={
+              <div className='w-max! flex! gap-1 items-center'>
+                <span>LLM Model for Processing & Chat</span>
+              </div>
+            }
+            selectProps={{
+              onChange: handleChange,
+              // @ts-ignore
+              options: allOptions?.map((option) => {
+                const label = typeof option === 'string' ? capitalizeWithUnderscore(option) : capitalize(option.label);
+                const value = typeof option === 'string' ? option : option.value;
+                const isModelSupported = !isProdEnv || prodllms?.includes(value);
+                return {
+                  label: !isModelSupported ? (
+                    <Tooltip type='simple' placement={isLargeDesktop ? 'left' : 'right'}>
+                      <Tooltip.Trigger>
+                        <span className='text-nowrap'>{label}</span>
+                      </Tooltip.Trigger>
+                      <Tooltip.Content>Available In Development Version</Tooltip.Content>
+                    </Tooltip>
+                  ) : (
+                    <span className='text-nowrap'>{label}</span>
+                  ),
+                  value,
+                  isDisabled: !isModelSupported,
+                };
+              }),
+              placeholder: placeholder || 'Select an option',
+              defaultValue: defaultValue
+                ? { label: capitalizeWithUnderscore(defaultValue), value: defaultValue }
+                : undefined,
+              menuPlacement: 'auto',
+              isDisabled: isDisabled,
+              value: value,
+            }}
+            size='medium'
+            isFluid
+            htmlAttributes={{
+              'aria-label': 'A selection dropdown',
+            }}
+          />
+        </SpotlightTarget>
         {children}
       </div>
     </>
   );
 };
-export default DropdownComponent;
+export default memo(DropdownComponent);

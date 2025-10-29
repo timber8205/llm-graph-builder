@@ -1,16 +1,19 @@
 import { Button, Dialog, Typography } from '@neo4j-ndl/react';
 import { CustomFile } from '../../../types';
 import LargeFilesAlert from './LargeFilesAlert';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useFileContext } from '../../../context/UsersFiles';
+import ExpiredFilesAlert from '../ExpirationModal/ExpiredFilesAlert';
+import { isExpired } from '../../../utils/Utils';
 
-export default function ConfirmationDialog({
+function ConfirmationDialog({
   largeFiles,
   open,
   onClose,
   loading,
   extractHandler,
   selectedRows,
+  isLargeDocumentAlert = false,
 }: {
   largeFiles: CustomFile[];
   open: boolean;
@@ -18,12 +21,13 @@ export default function ConfirmationDialog({
   loading: boolean;
   extractHandler: (selectedFilesFromAllfiles: CustomFile[]) => void;
   selectedRows: CustomFile[];
+  isLargeDocumentAlert?: boolean;
 }) {
   const { setSelectedRows, filesData, setRowSelection } = useFileContext();
   const [checked, setChecked] = useState<string[]>([...largeFiles.map((f) => f.id)]);
-  const handleToggle = (ischecked: boolean, id: string) => {
+  const handleToggle = (isChecked: boolean, id: string) => {
     const newChecked = [...checked];
-    if (ischecked) {
+    if (isChecked) {
       const file = filesData.find((f) => f.id === id);
       newChecked.push(id);
       setSelectedRows((prev) => {
@@ -70,21 +74,25 @@ export default function ConfirmationDialog({
   return (
     <Dialog
       size='medium'
-      open={open}
-      aria-labelledby='form-dialog-title'
+      isOpen={open}
       onClose={() => {
         setChecked([]);
         onClose();
+      }}
+      htmlAttributes={{
+        'aria-labelledby': 'form-dialog-title',
       }}
     >
       <Dialog.Content className='n-flex n-flex-col n-gap-token-4'>
         {largeFiles.length === 0 && loading ? (
           <Typography variant='subheading-large'>Files are under processing</Typography>
+        ) : isLargeDocumentAlert ? (
+          <LargeFilesAlert handleToggle={handleToggle} Files={largeFiles} checked={checked}></LargeFilesAlert>
         ) : (
-          <LargeFilesAlert handleToggle={handleToggle} largeFiles={largeFiles} checked={checked}></LargeFilesAlert>
+          <ExpiredFilesAlert checked={checked} handleToggle={handleToggle} Files={largeFiles} />
         )}
       </Dialog.Content>
-      <Dialog.Actions className='!mt-3'>
+      <Dialog.Actions className='mt-3!'>
         <Button
           onClick={() => {
             if (selectedRows.length) {
@@ -103,7 +111,9 @@ export default function ConfirmationDialog({
             setChecked([]);
             onClose();
           }}
-          size='large'
+          isDisabled={largeFiles.some(
+            (f) => f.createdAt != undefined && checked.includes(f.id) && isExpired(f?.createdAt as Date)
+          )}
         >
           Continue
         </Button>
@@ -111,3 +121,4 @@ export default function ConfirmationDialog({
     </Dialog>
   );
 }
+export default memo(ConfirmationDialog);

@@ -1,45 +1,105 @@
-import { Dialog, Tabs, Box, Typography, Flex, useMediaQuery } from '@neo4j-ndl/react';
+import { Dialog, Tabs, Typography, Flex, useMediaQuery } from '@neo4j-ndl/react';
 import graphenhancement from '../../../assets/images/graph-enhancements.svg';
-import { useEffect, useState } from 'react';
+import { Dispatch, SetStateAction, useState } from 'react';
 import DeletePopUpForOrphanNodes from './DeleteTabForOrphanNodes';
 import deleteOrphanAPI from '../../../services/DeleteOrphanNodes';
-import { UserCredentials } from '../../../types';
-import { useCredentials } from '../../../context/UserCredentials';
-import EntityExtractionSettings from './EnitityExtraction/EntityExtractionSetting';
+import NewEntityExtractionSetting from './EnitityExtraction/NewEntityExtractionSetting';
 import { useFileContext } from '../../../context/UsersFiles';
 import DeduplicationTab from './Deduplication';
 import { tokens } from '@neo4j-ndl/base';
 import PostProcessingCheckList from './PostProcessingCheckList';
+import AdditionalInstructionsText from './AdditionalInstructions';
+import { OptionType } from '../../../types';
 
 export default function GraphEnhancementDialog({
   open,
   onClose,
-  closeSettingModal,
+  combinedPatterns,
+  setCombinedPatterns,
+  combinedNodes,
+  setCombinedNodes,
+  combinedRels,
+  setCombinedRels,
 }: {
   open: boolean;
   onClose: () => void;
-  closeSettingModal: () => void;
+  combinedPatterns: string[];
+  setCombinedPatterns: Dispatch<SetStateAction<string[]>>;
+  combinedNodes: OptionType[];
+  setCombinedNodes: Dispatch<SetStateAction<OptionType[]>>;
+  combinedRels: OptionType[];
+  setCombinedRels: Dispatch<SetStateAction<OptionType[]>>;
 }) {
   const { breakpoints } = tokens;
   const [orphanDeleteAPIloading, setorphanDeleteAPIloading] = useState<boolean>(false);
-  const { setShowTextFromSchemaDialog } = useFileContext();
-  const { userCredentials } = useCredentials();
+  const {
+    setShowTextFromSchemaDialog,
+    setSchemaLoadDialog,
+    setPredefinedSchemaDialog,
+    setUserDefinedPattern,
+    setUserDefinedNodes,
+    setUserDefinedRels,
+    setDbPattern,
+    setDbNodes,
+    setDbRels,
+    setSchemaValNodes,
+    setSchemaValRels,
+    setSchemaTextPattern,
+    setPreDefinedNodes,
+    setPreDefinedRels,
+    setPreDefinedPattern,
+    setSelectedPreDefOption,
+    allPatterns,
+    setDataImporterSchemaDialog,
+    setImporterNodes,
+    setImporterPattern,
+    setImporterRels,
+  } = useFileContext();
   const isTablet = useMediaQuery(`(min-width:${breakpoints.xs}) and (max-width: ${breakpoints.lg})`);
 
   const orphanNodesDeleteHandler = async (selectedEntities: string[]) => {
     try {
       setorphanDeleteAPIloading(true);
-      const response = await deleteOrphanAPI(userCredentials as UserCredentials, selectedEntities);
+      await deleteOrphanAPI(selectedEntities);
       setorphanDeleteAPIloading(false);
-      console.log(response);
     } catch (error) {
       setorphanDeleteAPIloading(false);
       console.log(error);
     }
   };
-  useEffect(() => {
-    closeSettingModal();
-  }, []);
+
+  const handleOnclose = () => {
+    if (allPatterns.length > 0) {
+      onClose();
+      return;
+    }
+    // User
+    setUserDefinedPattern([]);
+    setUserDefinedNodes([]);
+    setUserDefinedRels([]);
+    // DB
+    setDbPattern([]);
+    setDbNodes([]);
+    setDbRels([]);
+    // Text
+    setSchemaTextPattern([]);
+    setSchemaValNodes([]);
+    setSchemaValRels([]);
+    // Predefined
+    setPreDefinedNodes([]);
+    setPreDefinedRels([]);
+    setPreDefinedPattern([]);
+    // combined Nodes and rels
+    setCombinedNodes([]);
+    setCombinedRels([]);
+    setCombinedPatterns([]);
+    // Data Importer
+    setImporterNodes([]);
+    setImporterPattern([]);
+    setImporterRels([]);
+    setSelectedPreDefOption(null);
+    onClose();
+  };
 
   const [activeTab, setactiveTab] = useState<number>(0);
   return (
@@ -48,14 +108,14 @@ export default function GraphEnhancementDialog({
         id: 'graph-enhancement-popup',
         className: 'n-p-token-4 n-rounded-lg',
       }}
-      open={open}
+      isOpen={open}
       size='unset'
-      disableCloseButton={false}
-      onClose={onClose}
+      hasDisabledCloseButton={false}
+      onClose={handleOnclose}
     >
-      <Dialog.Header className='flex justify-between self-end !mb-0 '>
-        <Box className='n-bg-palette-neutral-bg-weak px-4'>
-          <Box className='flex flex-row items-center mb-2'>
+      <Dialog.Header className='flex justify-between self-end mb-0! '>
+        <div className='n-bg-palette-neutral-bg-weak px-4'>
+          <div className='flex! flex-row items-center mb-2'>
             <img
               src={graphenhancement}
               style={{
@@ -65,8 +125,9 @@ export default function GraphEnhancementDialog({
                 objectFit: 'contain',
               }}
               loading='lazy'
+              alt='graph-enhancement-options-logo'
             />
-            <Box className='flex flex-col'>
+            <div className='flex flex-col'>
               <Typography variant={isTablet ? 'h5' : 'h2'}>Graph Enhancements</Typography>
               <Typography variant={isTablet ? 'subheading-small' : 'subheading-medium'} className='mb-2'>
                 {isTablet
@@ -77,44 +138,88 @@ export default function GraphEnhancementDialog({
               </Typography>
               <Flex className='pt-2'>
                 <Tabs fill='underline' onChange={setactiveTab} size={isTablet ? 'small' : 'large'} value={activeTab}>
-                  <Tabs.Tab tabId={0} aria-label='Database'>
+                  <Tabs.Tab
+                    tabId={0}
+                    htmlAttributes={{
+                      'aria-label': 'Entity Extraction Settings',
+                    }}
+                  >
                     Entity Extraction Settings
                   </Tabs.Tab>
-                  <Tabs.Tab tabId={1} aria-label='Add database'>
+                  <Tabs.Tab
+                    tabId={1}
+                    htmlAttributes={{
+                      'aria-label': 'Additional Instructions',
+                    }}
+                  >
+                    Additional Instructions
+                  </Tabs.Tab>
+                  <Tabs.Tab
+                    tabId={2}
+                    htmlAttributes={{
+                      'aria-label': 'Disconnected Nodes',
+                    }}
+                  >
                     Disconnected Nodes
                   </Tabs.Tab>
-                  <Tabs.Tab tabId={2} aria-label='Duplication Nodes'>
+                  <Tabs.Tab
+                    tabId={3}
+                    htmlAttributes={{
+                      'aria-label': 'Duplication Nodes',
+                    }}
+                  >
                     De-Duplication Of Nodes
                   </Tabs.Tab>
-                  <Tabs.Tab tabId={3} aria-label='Duplication Nodes'>
+                  <Tabs.Tab
+                    tabId={4}
+                    htmlAttributes={{
+                      'aria-label': 'Post Processing Jobs',
+                    }}
+                  >
                     Post Processing Jobs
                   </Tabs.Tab>
                 </Tabs>
               </Flex>
-            </Box>
-          </Box>
-        </Box>
+            </div>
+          </div>
+        </div>
       </Dialog.Header>
       <Dialog.Content className='flex flex-col n-gap-token- grow w-[90%] mx-auto'>
         <Tabs.TabPanel className='n-flex n-flex-col n-gap-token-4' value={activeTab} tabId={0}>
           <div className='w-[80%] mx-auto'>
-            <EntityExtractionSettings
+            <NewEntityExtractionSetting
               view='Tabs'
               openTextSchema={() => {
                 setShowTextFromSchemaDialog({ triggeredFrom: 'enhancementtab', show: true });
               }}
-              colseEnhanceGraphSchemaDialog={onClose}
+              openLoadSchema={() => setSchemaLoadDialog({ triggeredFrom: 'enhancementtab', show: true })}
+              openPredefinedSchema={() => {
+                setPredefinedSchemaDialog({ triggeredFrom: 'enhancementtab', show: true });
+              }}
+              closeEnhanceGraphSchemaDialog={onClose}
               settingView='headerView'
+              combinedPatterns={combinedPatterns}
+              setCombinedPatterns={setCombinedPatterns}
+              combinedNodes={combinedNodes}
+              setCombinedNodes={setCombinedNodes}
+              combinedRels={combinedRels}
+              setCombinedRels={setCombinedRels}
+              openDataImporterSchema={() => {
+                setDataImporterSchemaDialog({ triggeredFrom: 'enhancementtab', show: true });
+              }}
             />
           </div>
         </Tabs.TabPanel>
         <Tabs.TabPanel className='n-flex n-flex-col n-gap-token-4 n-p-token-6' value={activeTab} tabId={1}>
-          <DeletePopUpForOrphanNodes deleteHandler={orphanNodesDeleteHandler} loading={orphanDeleteAPIloading} />
+          <AdditionalInstructionsText closeEnhanceGraphSchemaDialog={onClose} />
         </Tabs.TabPanel>
         <Tabs.TabPanel className='n-flex n-flex-col n-gap-token-4 n-p-token-6' value={activeTab} tabId={2}>
-          <DeduplicationTab />
+          <DeletePopUpForOrphanNodes deleteHandler={orphanNodesDeleteHandler} loading={orphanDeleteAPIloading} />
         </Tabs.TabPanel>
         <Tabs.TabPanel className='n-flex n-flex-col n-gap-token-4 n-p-token-6' value={activeTab} tabId={3}>
+          <DeduplicationTab />
+        </Tabs.TabPanel>
+        <Tabs.TabPanel className='n-flex n-flex-col n-gap-token-4 n-p-token-6' value={activeTab} tabId={4}>
           <PostProcessingCheckList />
         </Tabs.TabPanel>
       </Dialog.Content>

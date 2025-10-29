@@ -1,12 +1,8 @@
 import api from '../API/Index';
 
-const connectAPI = async (connectionURI: string, username: string, password: string, database: string) => {
+const connectAPI = async () => {
   try {
     const formData = new FormData();
-    formData.append('uri', connectionURI ?? '');
-    formData.append('database', database ?? '');
-    formData.append('userName', username ?? '');
-    formData.append('password', password ?? '');
     const response = await api.post(`/connect`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -18,4 +14,16 @@ const connectAPI = async (connectionURI: string, username: string, password: str
     throw error;
   }
 };
-export default connectAPI;
+
+const envConnectionAPI = async () => {
+  try {
+    const conectionUrl = `/backend_connection_configuration`;
+    const response = await api.post(conectionUrl);
+    return response;
+  } catch (error) {
+    console.log('API Connection error', error);
+    throw error;
+  }
+};
+
+export { connectAPI, envConnectionAPI };

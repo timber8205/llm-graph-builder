@@ -1,44 +1,37 @@
-from langchain_community.document_loaders import YoutubeLoader
-from pytube import YouTube
+from langchain.docstore.document import Document
+from src.shared.llm_graph_builder_exception import LLMGraphBuilderException
 from youtube_transcript_api import YouTubeTranscriptApi 
+from youtube_transcript_api.proxies import GenericProxyConfig
 import logging
 from urllib.parse import urlparse,parse_qs
 from difflib import SequenceMatcher
 from datetime import timedelta
-from langchain_community.document_loaders.youtube import TranscriptFormat
 from src.shared.constants import YOUTUBE_CHUNK_SIZE_SECONDS
-from typing import List, Dict, Any 
+import os
+import re
 
 def get_youtube_transcript(youtube_id):
   try:
-    #transcript = YouTubeTranscriptApi.get_transcript(youtube_id)
-    transcript_list = YouTubeTranscriptApi.list_transcripts(youtube_id)
-    transcript = transcript_list.find_transcript(["en"])
-    transcript_pieces: List[Dict[str, Any]] = transcript.fetch()
+    proxy = os.environ.get("YOUTUBE_TRANSCRIPT_PROXY") 
+    proxy_config = GenericProxyConfig(http_url=proxy, https_url=proxy) if proxy else None
+    youtube_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+    transcript_pieces = youtube_api.fetch(youtube_id, preserve_formatting=True)
+    transcript_pieces = transcript_pieces.to_raw_data()
     return transcript_pieces
   except Exception as e:
     message = f"Youtube transcript is not available for youtube Id: {youtube_id}"
-    raise Exception(message)
-  
-def get_youtube_combined_transcript(youtube_id):
-  try:
-    transcript_dict = get_youtube_transcript(youtube_id)
-    transcript = YouTubeTranscriptApi.get_transcript(youtube_id)
-    return transcript
-  except Exception as e:
-    message = f"Youtube transcript is not available for youtube Id: {youtube_id}"
-    raise Exception(message)
+    raise LLMGraphBuilderException(message)
   
 def get_youtube_combined_transcript(youtube_id):
   try:
     transcript_dict = get_youtube_transcript(youtube_id)
     transcript=''
     for td in transcript_dict:
-      transcript += ''.join(td['text'])
+      transcript += ''.join(td['text'])+" "
     return transcript
   except Exception as e:
     message = f"Youtube transcript is not available for youtube Id: {youtube_id}"
-    raise Exception(message)
+    raise LLMGraphBuilderException(message)
 
 
 def create_youtube_url(url):
@@ -55,19 +48,26 @@ def create_youtube_url(url):
   
 def get_documents_from_youtube(url):
     try:
-      youtube_loader = YoutubeLoader.from_youtube_url(url, 
-                                                      language=["en-US", "en-gb", "en-ca", "en-au","zh-CN", "zh-Hans", "zh-TW", "fr-FR","de-DE","it-IT","ja-JP","pt-BR","ru-RU","es-ES"],
-                                                      translation = "en",
-                                                      add_video_info=True,
-                                                      transcript_format=TranscriptFormat.CHUNKS,
-                                                      chunk_size_seconds=YOUTUBE_CHUNK_SIZE_SECONDS)
-      pages = youtube_loader.load()
-      file_name = YouTube(url).title
+      match = re.search(r'(?:v=)([0-9A-Za-z_-]{11})\s*',url)
+      transcript= get_youtube_transcript(match.group(1))
+      transcript_content=''
+      counter = YOUTUBE_CHUNK_SIZE_SECONDS 
+      pages = []
+      for i, td in enumerate(transcript):
+          if td['start'] < counter:
+              transcript_content += ''.join(td['text'])+" "
+          else :
+              transcript_content += ''.join(td['text'])+" "
+              pages.append(Document(page_content=transcript_content.strip(), metadata={'start_timestamp':str(timedelta(seconds = counter-YOUTUBE_CHUNK_SIZE_SECONDS)).split('.')[0], 'end_timestamp':str(timedelta(seconds = td['start'])).split('.')[0]}))
+              counter += YOUTUBE_CHUNK_SIZE_SECONDS  
+              transcript_content=''  
+      pages.append(Document(page_content=transcript_content.strip(), metadata={'start_timestamp':str(timedelta(seconds = counter-YOUTUBE_CHUNK_SIZE_SECONDS)).split('.')[0], 'end_timestamp':str(timedelta(seconds =transcript[-1]['start'] if transcript else counter)).split('.')[0]})) # Handle empty transcript_pieces
+      file_name = match.group(1)#youtube_transcript[0].metadata["snippet"]["title"]
       return file_name, pages
     except Exception as e:
       error_message = str(e)
       logging.exception(f'Exception in reading transcript from youtube:{error_message}')
-      raise Exception(error_message)  
+      raise LLMGraphBuilderException(error_message)  
 
 def get_calculated_timestamps(chunks, youtube_id):
   logging.info('Calculating timestamps for chunks')
